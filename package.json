@@ -1,0 +1,19 @@
+{
+  "name": "@yandu/plugin-feed-arxiv",
+  "version": "1.0.0",
+  "description": "Yandu plugin: arXiv Feed",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "yandu": { "main": "./dist/index.js" },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@yandu/types": "^0.0.4",
+    "typescript": "^5.6.0"
+  },
+  "publishConfig": { "access": "public" }
+}
