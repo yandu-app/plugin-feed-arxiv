@@ -1,5 +1,5 @@
 {
-  "name": "@yandu/plugin-feed-arxiv",
+  "name": "yandu-plugin-feed-arxiv",
   "version": "1.0.0",
   "description": "Yandu plugin: arXiv Feed",
   "type": "module",
