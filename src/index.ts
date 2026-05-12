@@ -6,7 +6,7 @@ import type {
   FetchResult,
   FeedEntry,
   FormatCapability,
-  PaperExternalIds,
+  ItemExternalIds,
 } from '@yandu/types';
 
 interface ConfigGetter {
@@ -127,7 +127,7 @@ class ArxivFeedAdapter implements FeedAdapter {
     };
   }
 
-  resolveDownload(externalIds: PaperExternalIds): {
+  resolveDownload(externalIds: ItemExternalIds): {
     url: string;
     format: string;
     priority: number;
