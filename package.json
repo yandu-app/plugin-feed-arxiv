@@ -12,7 +12,7 @@
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {
-    "@yandu/types": "*",
+    "@yandu/types": "workspace:*",
     "typescript": "^5.6.0"
   },
   "publishConfig": { "access": "public" }
