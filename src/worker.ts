@@ -21,7 +21,7 @@ export function parseAtom(xml:string):Entry[]{
    if(tag.local==='entry'){if(!feedChild||entry)throw Error('entry must be a direct feed child');entry={authors:[]};entryFields=new Set();pdfSeen=false;}
    else if(tag.local==='author'){if(!entryChild)throw Error('author must be a direct entry child');author='';authorHasName=false;}
    else if(tag.local==='name'){if(!authorChild||authorHasName)throw Error('name must occur once in an entry author');authorHasName=true;}
-   else if(entry&&['id','title','summary','published'].includes(tag.local)){if(!entryChild||entryFields.has(tag.local))throw Error(`${tag.local} must occur once as an entry child`);entryFields.add(tag.local);}
+   else if(entry&&['id','title','summary','published','updated'].includes(tag.local)){if(!entryChild||entryFields.has(tag.local))throw Error(`${tag.local} must occur once as an entry child`);entryFields.add(tag.local);}
    else if(entry&&tag.local==='link'){if(!entryChild)throw Error('entry link must be a direct entry child');if(tag.attributes.title?.value==='pdf'){if(pdfSeen)throw Error('duplicate PDF link');pdfSeen=true;entry.pdfUrl=tag.attributes.href?.value;}}
    else if(entry)throw Error(`unexpected Atom element in entry: ${tag.local}`);
    else if(!feedChild)throw Error(`unexpected Atom placement: ${tag.local}`);
@@ -30,7 +30,7 @@ export function parseAtom(xml:string):Entry[]{
   else throw Error('unexpected XML namespace');
   stack.push(node);
  });
- parser.on('text',value=>{if(!entry)return;const node=stack.at(-1),parent=stack.at(-2);if(node?.uri!==ATOM)return;if(node.local==='name'&&parent?.local==='author')author+=value;else if(['id','title','summary','published'].includes(node.local)&&parent?.local==='entry')entry[node.local]=String(entry[node.local]??'')+value;});
+ parser.on('text',value=>{if(!entry)return;const node=stack.at(-1),parent=stack.at(-2);if(node?.uri!==ATOM)return;if(node.local==='name'&&parent?.local==='author')author+=value;else if(['id','title','summary','published','updated'].includes(node.local)&&parent?.local==='entry')entry[node.local]=String(entry[node.local]??'')+value;});
  parser.on('closetag',tag=>{if(entry&&tag.uri===ATOM&&tag.local==='author'){if(!authorHasName)throw Error('author requires one name');(entry.authors as string[]).push(clean(author));}if(entry&&tag.uri===ATOM&&tag.local==='entry'){const sourceUrl=clean(String(entry.id??'')),source=new URL(sourceUrl);if(source.protocol!=='https:'||source.hostname!=='arxiv.org'||!source.pathname.startsWith('/abs/')||source.search||source.hash)throw Error('invalid arXiv source URL');const id=decodeURIComponent(source.pathname.slice(5));if(!ID.test(id))throw Error('invalid arXiv id');const pdfUrl=String(entry.pdfUrl??'');if(pdfUrl!==`https://arxiv.org/pdf/${id}.pdf`)throw Error('invalid arXiv PDF URL');const title=clean(String(entry.title??'')),abstractText=clean(String(entry.summary??'')),authors=entry.authors as string[],publishedAt=clean(String(entry.published??''))||null;if(!title||!abstractText||!authors.length||!authors.every(Boolean))throw Error('incomplete Atom entry');if(publishedAt&&!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(publishedAt))throw Error('invalid publication time');entries.push({id,title,abstractText,authors,publishedAt,sourceUrl,pdfUrl,sourceType:'arxiv',externalIds:[{kind:'arxiv',value:id}]});entry=undefined;}stack.pop();});
  parser.write(xml).close();if(!seenRoot||stack.length)throw Error('incomplete Atom feed');return entries;
 }
