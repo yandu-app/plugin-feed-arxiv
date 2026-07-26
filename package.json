@@ -5,19 +5,38 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "bin": { "yandu-feed-arxiv": "./dist/worker.js" },
-  "yandu": { "main": "./dist/index.js", "worker": "./dist/worker.js", "protocol": "jsonl-v1" },
-  "files": ["dist"],
+  "bin": {
+    "yandu-feed-arxiv": "./dist/worker.js"
+  },
+  "yandu": {
+    "main": "./dist/index.js",
+    "worker": "./dist/worker.js",
+    "protocol": "jsonl-v1"
+  },
+  "files": [
+    "dist/index.js",
+    "dist/index.d.ts",
+    "dist/index.d.ts.map",
+    "dist/worker.js",
+    "dist/worker.d.ts",
+    "dist/worker.d.ts.map"
+  ],
   "scripts": {
-    "build": "tsc",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc",
     "test": "npm run build && node --test test/worker.test.js",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "prepublishOnly": "npm run build"
+    "prepack": "npm test",
+    "prepublishOnly": "npm test"
   },
   "devDependencies": {
-    "@yandu/types": "workspace:*",
-    "typescript": "^5.6.0"
+    "@yandu/types": "0.1.0",
+    "typescript": "5.9.3"
   },
-  "publishConfig": { "access": "public" }
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "saxes": "6.0.0"
+  }
 }

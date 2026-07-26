@@ -1,69 +1,23 @@
+#!/usr/bin/env node
 import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
-
-export type Entry = { id: string; title: string; abstractText: string; authors: string[]; publishedAt: string | null; sourceUrl: string; sourceType: 'arxiv'; externalIds: { kind: 'arxiv'; value: string }[] };
-type Request = { id: string; method: string; params?: unknown };
-type Response = { id: string; ok: true; result: { entries: Entry[]; nextCursor: string | null } } | { id: string; ok: false; error: { code: string; message: string } };
-
-const text = (xml: string, tag: string) => {
-  const value = xml.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`))?.[1] ?? '';
-  return value.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
-};
-
-export function buildQueryUrl(query: string, start: number, limit: number): string {
-  if (!Number.isInteger(start) || start < 0) throw new Error('cursor must be a non-negative integer');
-  if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new Error('limit must be between 1 and 50');
-  return `https://export.arxiv.org/api/query?search_query=${encodeURIComponent(query)}&start=${start}&max_results=${limit}&sortBy=submittedDate&sortOrder=descending`;
+import { SaxesParser } from 'saxes';
+export type Entry = { id:string; title:string; abstractText:string; authors:string[]; publishedAt:string|null; sourceUrl:string; pdfUrl:string; sourceType:'arxiv'; externalIds:{kind:'arxiv';value:string}[] };
+type Response={id:string;ok:true;result:{entries:Entry[];nextCursor:string|null}}|{id:string;ok:false;error:{code:string;message:string}};
+const MAX=16*1024*1024, ID=/^(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?\/\d{7})(?:v\d+)?$/;
+const clean=(s:string)=>s.replace(/\s+/g,' ').trim();
+export function buildQueryUrl(query:string,start:number,limit:number){if(!Number.isInteger(start)||start<0)throw Error('cursor must be a non-negative integer');if(!Number.isInteger(limit)||limit<1||limit>50)throw Error('limit must be between 1 and 50');return `https://export.arxiv.org/api/query?search_query=${encodeURIComponent(query)}&start=${start}&max_results=${limit}&sortBy=submittedDate&sortOrder=descending`;}
+export function parseAtom(xml:string):Entry[]{
+ if(/<!DOCTYPE|<!ENTITY|<!\[CDATA\[/i.test(xml))throw Error('forbidden XML construct');
+ const parser=new SaxesParser({xmlns:true}), entries:Entry[]=[]; let entry:Record<string,unknown>|undefined,field='',author='';const stack:string[]=[];
+ parser.on('doctype',()=>{throw Error('DTD is forbidden')});parser.on('cdata',()=>{throw Error('CDATA is forbidden')});
+ parser.on('opentag',tag=>{if(tag.uri!=='http://www.w3.org/2005/Atom')throw Error('unexpected XML namespace');stack.push(tag.local);field=tag.local;if(field==='entry')entry={authors:[]};if(entry&&field==='link'&&tag.attributes.title?.value==='pdf')entry.pdfUrl=tag.attributes.href?.value;});
+ parser.on('text',value=>{if(!entry)return;if(field==='name'&&stack.includes('author'))author+=value;else if(['id','title','summary','published'].includes(field))entry[field]=String(entry[field]??'')+value;});
+ parser.on('closetag',tag=>{if(entry&&tag.local==='author'){(entry.authors as string[]).push(clean(author));author='';}if(entry&&tag.local==='entry'){const sourceUrl=clean(String(entry.id??'')),source=new URL(sourceUrl);if(source.protocol!=='https:'||source.hostname!=='arxiv.org'||!source.pathname.startsWith('/abs/')||source.search||source.hash)throw Error('invalid arXiv source URL');const id=decodeURIComponent(source.pathname.slice(5));if(!ID.test(id))throw Error('invalid arXiv id');const pdfUrl=String(entry.pdfUrl??'');if(pdfUrl!==`https://arxiv.org/pdf/${id}.pdf`)throw Error('invalid arXiv PDF URL');const title=clean(String(entry.title??'')),abstractText=clean(String(entry.summary??'')),authors=entry.authors as string[],publishedAt=clean(String(entry.published??''))||null;if(!title||!abstractText||!authors.length||!authors.every(Boolean))throw Error('incomplete Atom entry');if(publishedAt&&!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(publishedAt))throw Error('invalid publication time');entries.push({id,title,abstractText,authors,publishedAt,sourceUrl,pdfUrl,sourceType:'arxiv',externalIds:[{kind:'arxiv',value:id}]});entry=undefined;}stack.pop();field=stack.at(-1)??'';});
+ parser.write(xml).close();return entries;
 }
-
-export function parseAtom(xml: string): Entry[] {
-  return [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].flatMap((match) => {
-    const block = match[1];
-    const sourceUrl = text(block, 'id');
-    const id = sourceUrl.match(/\/abs\/([^?#/]+)/)?.[1];
-    if (!id) return [];
-    return [{ id, title: text(block, 'title'), abstractText: text(block, 'summary'), authors: [...block.matchAll(/<author>[\s\S]*?<name>([\s\S]*?)<\/name>[\s\S]*?<\/author>/g)].map((author) => text(`<name>${author[1]}</name>`, 'name')), publishedAt: text(block, 'published') || null, sourceUrl, sourceType: 'arxiv' as const, externalIds: [{ kind: 'arxiv' as const, value: id }] }];
-  });
-}
-
-export async function handleRequest(request: Request, get: (url: string) => Promise<string>): Promise<Response> {
-  const fail = (message: string, code = 'INVALID_REQUEST'): Response => ({ id: typeof request?.id === 'string' ? request.id : '', ok: false, error: { code, message } });
-  if (!request || typeof request.id !== 'string' || request.id.length === 0) return fail('id must be a non-empty string');
-  if (request.method !== 'fetch') return fail('method must be fetch');
-  const params = request.params as { query?: unknown; cursor?: unknown; limit?: unknown } | undefined;
-  if (!params || typeof params.query !== 'string' || params.query.trim() === '') return fail('params.query must be a non-empty string');
-  const cursor = params.cursor === undefined ? 0 : Number(params.cursor);
-  const limit = params.limit === undefined ? 50 : Number(params.limit);
-  try {
-    const entries = parseAtom(await get(buildQueryUrl(params.query, cursor, limit)));
-    return { id: request.id, ok: true, result: { entries, nextCursor: entries.length >= limit ? String(cursor + entries.length) : null } };
-  } catch (error) {
-    return fail(error instanceof Error ? error.message : String(error), 'FETCH_FAILED');
-  }
-}
-
-async function main() {
-  const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
-  for await (const line of lines) {
-    let response: Response;
-    try {
-      const request = JSON.parse(line) as Request;
-      response = await handleRequest(request, async (url) => {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30_000);
-        try {
-          const result = await fetch(url, { headers: { 'user-agent': 'Yandu/1.0 (feed-arxiv)' }, signal: controller.signal });
-          if (!result.ok) throw new Error(`arXiv API returned ${result.status}`);
-          const length = Number(result.headers.get('content-length') ?? 0);
-          if (length > 16 * 1024 * 1024) throw new Error('arXiv response exceeds 16 MiB');
-          return await result.text();
-        } finally { clearTimeout(timeout); }
-      });
-    } catch (error) {
-      response = { id: '', ok: false, error: { code: 'INVALID_JSON', message: error instanceof Error ? error.message : String(error) } };
-    }
-    process.stdout.write(`${JSON.stringify(response)}\n`);
-  }
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) void main();
+function validate(value:unknown){if(!value||typeof value!=='object'||Array.isArray(value))throw Error('request must be an object');const r=value as Record<string,unknown>;if(Object.keys(r).some(k=>!['id','method','params'].includes(k))||typeof r.id!=='string'||!r.id||r.method!=='fetch'||!r.params||typeof r.params!=='object'||Array.isArray(r.params))throw Error('invalid request envelope');const p=r.params as Record<string,unknown>;if(Object.keys(p).some(k=>!['query','cursor','limit'].includes(k))||typeof p.query!=='string'||!p.query.trim())throw Error('invalid fetch params');const cursor=p.cursor??0,limit=p.limit??50;buildQueryUrl(p.query,cursor as number,limit as number);return{id:r.id,query:p.query,cursor:cursor as number,limit:limit as number};}
+export async function handleRequest(value:unknown,get:(url:string)=>Promise<string>):Promise<Response>{let id='';try{const r=validate(value);id=r.id;const entries=parseAtom(await get(buildQueryUrl(r.query,r.cursor,r.limit)));if(entries.length>r.limit)throw Error('response contains too many entries');return{id,ok:true,result:{entries,nextCursor:entries.length===r.limit?String(r.cursor+entries.length):null}};}catch(error){return{id,ok:false,error:{code:id?'REQUEST_FAILED':'INVALID_REQUEST',message:error instanceof Error?error.message:String(error)}};}}
+export async function readResponseBody(body:ReadableStream<Uint8Array>|null){if(!body)throw Error('arXiv response has no body');const reader=body.getReader(),chunks:Uint8Array[]=[];let size=0;try{for(;;){const{done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>MAX)throw Error('arXiv response exceeds 16 MiB');chunks.push(value);}}finally{reader.releaseLock();}const all=new Uint8Array(size);let at=0;for(const chunk of chunks){all.set(chunk,at);at+=chunk.length;}return new TextDecoder('utf-8',{fatal:true}).decode(all);}
+async function main(){const lines=createInterface({input:process.stdin,crlfDelay:Infinity});for await(const line of lines){let response:Response;try{response=await handleRequest(JSON.parse(line),async url=>{const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),30000);try{const result=await fetch(url,{headers:{'user-agent':'Yandu/1.0 (feed-arxiv)'},signal:controller.signal});if(!result.ok)throw Error(`arXiv API returned ${result.status}`);return await readResponseBody(result.body);}finally{clearTimeout(timeout);}});}catch(error){response={id:'',ok:false,error:{code:'INVALID_JSON',message:error instanceof Error?error.message:String(error)}};}process.stdout.write(`${JSON.stringify(response)}\n`);}}
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href)void main();
