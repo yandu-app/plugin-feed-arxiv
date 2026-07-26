@@ -22,6 +22,7 @@ export function parseAtom(xml:string):Entry[]{
    else if(tag.local==='author'){if(!entryChild)throw Error('author must be a direct entry child');author='';authorHasName=false;}
    else if(tag.local==='name'){if(!authorChild||authorHasName)throw Error('name must occur once in an entry author');authorHasName=true;}
    else if(entry&&['id','title','summary','published','updated'].includes(tag.local)){if(!entryChild||entryFields.has(tag.local))throw Error(`${tag.local} must occur once as an entry child`);entryFields.add(tag.local);}
+   else if(entry&&tag.local==='category'){if(!entryChild)throw Error('entry category must be a direct entry child');}
    else if(entry&&tag.local==='link'){if(!entryChild)throw Error('entry link must be a direct entry child');if(tag.attributes.title?.value==='pdf'){if(pdfSeen)throw Error('duplicate PDF link');pdfSeen=true;entry.pdfUrl=tag.attributes.href?.value;}}
    else if(entry)throw Error(`unexpected Atom element in entry: ${tag.local}`);
    else if(!feedChild)throw Error(`unexpected Atom placement: ${tag.local}`);

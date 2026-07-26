@@ -16,9 +16,9 @@ test('parses official modern and legacy identifiers and exact PDF URLs', () => {
   assert.equal(parseAtom(legacy)[0].id, 'hep-th/9901001v3');
 });
 
-test('accepts the standard direct Atom entry updated field', () => {
-  const withUpdated = atom.replace('</published>', '</published><updated>2026-07-26T00:00:00Z</updated>');
-  assert.equal(parseAtom(withUpdated).length, 1);
+test('accepts standard direct Atom entry updated and category fields', () => {
+  const withUpdatedAndCategory = atom.replace('</published>', '</published><updated>2026-07-26T00:00:00Z</updated><category term="cs.AI"/>');
+  assert.equal(parseAtom(withUpdatedAndCategory).length, 1);
 });
 
 test('rejects malformed XML, namespaces, CDATA, DTD, entities, and forged URLs', () => {
