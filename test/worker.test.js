@@ -27,6 +27,26 @@ test('rejects malformed XML, namespaces, CDATA, DTD, entities, and forged URLs',
   ]) assert.throws(() => parseAtom(xml));
 });
 
+test('rejects unexpected Atom duplicates and placements', () => {
+  for (const xml of [
+    atom.replace('</entry>', '<title>duplicate</title></entry>'),
+    atom.replace('<entry>', '<entry><entry>'),
+    atom.replace('<author><name>', '<author><name>First</name><name>'),
+    atom.replace('<author><name>Ada Lovelace</name></author>', '<name>Ada Lovelace</name>'),
+    atom.replace('<title>A &amp; B paper</title>', '<author><title>A &amp; B paper</title><name>Ada</name></author>'),
+    atom.replace('<published>', '<author><published>').replace('</published>', '</published></author>'),
+    atom.replace('<link title="pdf"', '<author><link title="pdf"').replace('/></entry>', '/></author></entry>'),
+    atom.replace('<summary>', '<feed><summary>').replace('</summary>', '</summary></feed>'),
+  ]) assert.throws(() => parseAtom(xml));
+});
+
+test('accepts arXiv extension fields only as direct entry children', () => {
+  const extended = atom.replace('<published>', '<arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom" term="cs.AI"/><arxiv:comment xmlns:arxiv="http://arxiv.org/schemas/atom">note</arxiv:comment><published>');
+  assert.equal(parseAtom(extended).length, 1);
+  assert.throws(() => parseAtom(extended.replace('<arxiv:comment', '<author><arxiv:comment').replace('</arxiv:comment>', '</arxiv:comment></author>')));
+  assert.throws(() => parseAtom(atom.replace('<title>A &amp; B paper</title>', '<x:title xmlns:x="http://arxiv.org/schemas/atom">ignored</x:title><title>A &amp; B paper</title>')));
+});
+
 test('strict request schema rejects coercion and unknown fields', async () => {
   const get = async () => { throw new Error('must not fetch'); };
   for (const request of [

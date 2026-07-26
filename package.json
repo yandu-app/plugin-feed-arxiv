@@ -30,7 +30,8 @@
     "prepublishOnly": "npm test"
   },
   "devDependencies": {
-    "@yandu/types": "0.1.0",
+    "@types/node": "24.1.0",
+    "@yandu/types": "0.0.7",
     "typescript": "5.9.3"
   },
   "publishConfig": {

@@ -6,8 +6,8 @@ import type {
   FetchResult,
   FeedEntry,
   FormatCapability,
-  ItemExternalIds,
 } from '@yandu/types';
+type ItemExternalIds = Record<string, string | undefined>;
 
 interface ConfigGetter {
   get<T>(key: string): T | undefined;
