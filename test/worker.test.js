@@ -16,6 +16,11 @@ test('parses official modern and legacy identifiers and exact PDF URLs', () => {
   assert.equal(parseAtom(legacy)[0].id, 'hep-th/9901001v3');
 });
 
+test('normalizes an official legacy HTTP Atom id to an HTTPS source URL', () => {
+  const legacyHttpId = atom.replace('https://arxiv.org/abs/', 'http://arxiv.org/abs/');
+  assert.equal(parseAtom(legacyHttpId)[0].sourceUrl, 'https://arxiv.org/abs/2607.12345v2');
+});
+
 test('accepts standard direct Atom entry updated and category fields', () => {
   const withUpdatedAndCategory = atom.replace('</published>', '</published><updated>2026-07-26T00:00:00Z</updated><category term="cs.AI"/>');
   assert.equal(parseAtom(withUpdatedAndCategory).length, 1);
